@@ -20,15 +20,15 @@ def main():
     graphql_client = build_graphql_client(config.gitlab_url, config.gitlab_token)
     influx_client = build_influx_client(config.influx_url, config.influx_token, config.influx_org)
 
-    user_projects_results = get_project_details_query(graphql_client, config.gitlab_username)
-    project_details = [create_project_entity(p["project"]) for p in user_projects_results["data"]["user"]["projectMemberships"]["nodes"]]
+    user_projects_details = get_project_details_query(graphql_client, config.gitlab_username)
+    projects = create_project_entities(user_projects_details)
 
-    for project_detail in project_details:
-        project_detail.pylint_job.score = get_code_quality(config.gitlab_token, project_detail.id, project_detail.pylint_job.id)
-        project_detail.bandit_job.score = get_security_sast_issues(config.gitlab_token, project_detail.id, project_detail.bandit_job.id)
-        project_detail.safety_job.score = get_vulnerable_dependencies(config.gitlab_token, project_detail.id, project_detail.safety_job.id)
+    for project in projects:
+        project.pylint_job.score = get_code_quality(config.gitlab_token, project.id, project.pylint_job.id)
+        project.bandit_job.score = get_security_sast_issues(config.gitlab_token, project.id, project.bandit_job.id)
+        project.safety_job.score = get_vulnerable_dependencies(config.gitlab_token, project.id, project.safety_job.id)
 
-        db_models = build_db_models(project_detail)
+        db_models = build_db_models(project)
         write_to_influx(influx_client, config.influx_org, db_models)
 
 
@@ -107,6 +107,10 @@ def get_project_details_query(client: GraphqlClient, username: str) -> Any:
     data = asyncio.run(client.execute_async(query=query, variables=variables))
 
     return data
+
+
+def create_project_entities(projects: Any) -> Any:
+    return [create_project_entity(p["project"]) for p in projects["data"]["user"]["projectMemberships"]["nodes"]]
 
 
 def create_project_entity(project: Any) -> ProjectDetailEntity:
